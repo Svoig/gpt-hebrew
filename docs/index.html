@@ -104,8 +104,8 @@
         ),
         React.createElement(Canvas, null,
           React.createElement(OrbitControls, null),
-          React.createElement(ambientLight, { intensity:0.5 }),
-          React.createElement(pointLight, { position:[10,10,10] }),
+          React.createElement("ambientLight", { intensity:0.5 }),
+          React.createElement("pointLight", { position:[10,10,10] }),
           React.createElement(FloatingText, { text: feedback==="success" ? "✓" : feedback==="fail" ? "✗" : question.verb, feedback })
         )
       );
