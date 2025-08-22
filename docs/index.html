@@ -2,180 +2,116 @@
 <html lang="en">
 <head>
   <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>Hebrew Binyanim Drill</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <style>
-    body, html { margin: 0; padding: 0; font-family: sans-serif; overflow: hidden; background: black;}
-    #root { width: 100vw; height: 100vh; display: flex; flex-direction: column; }
-    .ui { position: absolute; top: 0; left: 0; width: 100%; z-index: 10; padding: 10px; display: flex; flex-direction: column; align-items: center; }
-    .question-box { font-size: 1.5rem; margin-bottom: 10px; text-align: center; color: white; }
-    input { font-size: 1.2rem; padding: 5px; border-radius: 5px; border: none; }
-    button { font-size: 1rem; padding: 5px 10px; margin-top: 10px; border-radius: 5px; border: none; cursor: pointer; }
+    body {
+      margin:0; font-family:sans-serif; background:#111; color:white;
+      display:flex; flex-direction:column; align-items:center; justify-content:center; height:100vh;
+      overflow:hidden;
+    }
+    #root { width:100%; height:100%; }
+    .question-box {
+      position:absolute; top:10px; width:100%; text-align:center; font-size:1.2em;
+    }
+    input {
+      font-size:1.2em; padding:0.5em; border-radius:8px; border:none; margin-top:0.5em;
+      text-align:center;
+    }
   </style>
 </head>
 <body>
   <div id="root"></div>
-
   <script type="module">
-  import React, { useState, useRef, useEffect } from "https://esm.sh/react@18";
-  import ReactDOM from "https://esm.sh/react-dom@18";
-  import { Canvas, useFrame } from "https://esm.sh/@react-three/fiber@8.17.10";
-  import { OrbitControls, Text } from "https://esm.sh/@react-three/drei@9.120.6";
+    import React, { useState, useRef, useEffect } from "https://esm.sh/react@18";
+    import ReactDOM from "https://esm.sh/react-dom@18";
+    import { Canvas, useFrame } from "https://esm.sh/@react-three/fiber@8.17.10";
+    import { OrbitControls, Text } from "https://esm.sh/@react-three/drei@9.120.6";
 
-    // === Data for 7 binyanim (sample entries for brevity — expand as needed) ===
-    const CONJUGATIONS = {
-      "Qal": {
-        "Past": ["כָּתַב", "כָּתַבְתָּ", "כָּתְבָה"],
-        "Present": ["כּוֹתֵב", "כּוֹתֶבֶת"],
-        "Future": ["אֶכְתֹּב", "תִּכְתֹּב"],
-        "Imperative": ["כְּתֹב"]
-      },
-      "Nifal": {
-        "Past": ["נִכְתַּב"],
-        "Present": ["נִכְתָּב"],
-        "Future": ["אֶכָּתֵב"],
-        "Imperative": ["הִכָּתֵב"]
-      },
-      "Pi'el": {
-        "Past": ["דִּבֵּר", "דִּבַּרְתָּ"],
-        "Present": ["מְדַבֵּר"],
-        "Future": ["אֲדַבֵּר"],
-        "Imperative": ["דַּבֵּר"]
-      },
-      "Pu'al": {
-        "Past": ["דֻּבַּר"],
-        "Present": ["מְדֻבָּר"],
-        "Future": ["יְדֻבַּר"],
-        "Imperative": []
-      },
-      "Hifil": {
-        "Past": ["הִכְתִּיב"],
-        "Present": ["מַכְתִּיב"],
-        "Future": ["אַקְתִּיב"],
-        "Imperative": ["הַכְתֵּב"]
-      },
-      "Hufal": {
-        "Past": ["הֻכְתַּב"],
-        "Present": ["מוּכְתָּב"],
-        "Future": ["יוּכְתַּב"],
-        "Imperative": []
-      },
-      "Hitpa'el": {
-        "Past": ["הִתְכַּתֵּב"],
-        "Present": ["מִתְכַּתֵּב"],
-        "Future": ["אֶתְכַּתֵּב"],
-        "Imperative": ["הִתְכַּתֵּב"]
+    // --- Dataset of conjugations ---
+    const dataset = [
+      { verb:"כָּתַב", root:"כ-ת-ב", bin:"Pa'al", tense:"Past", pronoun:"אני", answer:"כָּתַבְתִּי" },
+      { verb:"כָּתַב", root:"כ-ת-ב", bin:"Pa'al", tense:"Past", pronoun:"הוא", answer:"כָּתַב" },
+      { verb:"כָּתַב", root:"כ-ת-ב", bin:"Pa'al", tense:"Present", pronoun:"אני", answer:"כוֹתֵב" },
+      { verb:"דִּבֵּר", root:"ד-ב-ר", bin:"Pi'el", tense:"Past", pronoun:"אני", answer:"דִּבַּרְתִּי" },
+      { verb:"דִּבֵּר", root:"ד-ב-ר", bin:"Pi'el", tense:"Present", pronoun:"היא", answer:"מְדַבֶּרֶת" },
+    ];
+
+    // Load spaced repetition state
+    let progress = JSON.parse(localStorage.getItem("progress") || "{}");
+
+    // --- Choose next question (simplified SRS) ---
+    function pickQuestion() {
+      let items = dataset.map(item => {
+        let score = progress[item.answer]?.score || 0;
+        let last = progress[item.answer]?.last || 0;
+        let due = Date.now() - last > 2000 * (score+1);
+        return { item, score, due };
+      });
+      let dueItems = items.filter(x => x.due);
+      if (dueItems.length > 0) {
+        return dueItems[Math.floor(Math.random() * dueItems.length)].item;
       }
-    };
-
-    const BINYANIM = Object.keys(CONJUGATIONS);
-    const TENSES = ["Past", "Present", "Future", "Imperative"];
-
-    // === Spaced Repetition (SM-2 inspired simplified) ===
-    function loadProgress() {
-      const data = localStorage.getItem("hebrewProgress");
-      return data ? JSON.parse(data) : {};
-    }
-    function saveProgress(progress) {
-      localStorage.setItem("hebrewProgress", JSON.stringify(progress));
+      return items[Math.floor(Math.random() * items.length)].item;
     }
 
-    function getDueQuestions(progress) {
-      const due = [];
-      for (const bin of BINYANIM) {
-        for (const tense of TENSES) {
-          const forms = CONJUGATIONS[bin][tense] || [];
-          for (const form of forms) {
-            const key = bin + "-" + tense + "-" + form;
-            const entry = progress[key] || { interval: 1, due: Date.now() };
-            if (Date.now() >= entry.due) due.push({ bin, tense, answer: form });
-          }
-        }
-      }
-      return due;
-    }
-
-    function updateProgress(progress, key, success) {
-      const entry = progress[key] || { interval: 1, due: Date.now() };
-      if (success) {
-        entry.interval *= 2;
-      } else {
-        entry.interval = 1;
-      }
-      entry.due = Date.now() + entry.interval * 60 * 1000; // minutes
-      progress[key] = entry;
-      saveProgress(progress);
-    }
-
-    // === React Components ===
+    // --- Floating 3D Text ---
     function FloatingText({ text, feedback }) {
       const ref = useRef();
-      useFrame((_, delta) => { if (ref.current) ref.current.rotation.y += delta; });
+      useFrame((state, delta) => {
+        if (ref.current) ref.current.rotation.y += delta;
+      });
       const color = feedback === "success" ? "lime" : feedback === "fail" ? "red" : "white";
-      return React.createElement(Text, { ref, color, fontSize: 1, position:[0,0,0]}, text);
+      return React.createElement(Text,
+        { ref, color, fontSize:1, position:[0,0,0]},
+        String(text || "")
+      );
     }
 
+    // --- Main App ---
     function App() {
-      const [progress, setProgress] = useState(loadProgress());
-      const [question, setQuestion] = useState(null);
+      const [question, setQuestion] = useState(pickQuestion());
       const [input, setInput] = useState("");
       const [feedback, setFeedback] = useState(null);
 
-      useEffect(() => { nextQuestion(); }, []);
-
-      const nextQuestion = () => {
-        const due = getDueQuestions(progress);
-        if (due.length === 0) {
-          setQuestion({ bin: "All done!", tense: "", answer: "" });
+      function checkAnswer(e) {
+        e.preventDefault();
+        if (input.trim() === question.answer) {
+          setFeedback("success");
+          progress[question.answer] = { score:(progress[question.answer]?.score||0)+1, last:Date.now() };
+          localStorage.setItem("progress", JSON.stringify(progress));
+          setTimeout(() => {
+            setQuestion(pickQuestion());
+            setInput(""); setFeedback(null);
+          }, 1000);
         } else {
-          setQuestion(due[Math.floor(Math.random() * due.length)]);
+          setFeedback("fail");
+          progress[question.answer] = { score:0, last:Date.now() };
+          localStorage.setItem("progress", JSON.stringify(progress));
         }
-      };
+      }
 
-      const handleSubmit = () => {
-        const key = question.bin + "-" + question.tense + "-" + question.answer;
-        const success = input === question.answer;
-        setFeedback(success ? "success" : "fail");
-        playSound(success ? "success" : "fail");
-        updateProgress(progress, key, success);
-        setProgress({ ...progress });
-        if (success) {
-          setTimeout(() => { setInput(""); setFeedback(null); nextQuestion(); }, 800);
-        }
-      };
-
-      const playSound = (type) => {
-        const audio = new Audio(type === "success"
-          ? "https://freesound.org/data/previews/109/109662_945474-lq.mp3"
-          : "https://freesound.org/data/previews/331/331912_3248244-lq.mp3");
-        audio.play();
-      };
-
-      if (!question) return null;
-
-      return React.createElement(React.Fragment, null,
-        React.createElement(Canvas, { camera:{ position:[0,0,5] } },
-          React.createElement("ambientLight", { intensity:0.5 }),
-          React.createElement("pointLight", { position:[10,10,10] }),
-          React.createElement(OrbitControls, null),
-          React.createElement(FloatingText, { text:feedback==="success"?"✔":feedback==="fail"?"✘":question.answer, feedback })
+      return React.createElement("div", { style:{width:"100%",height:"100%"} },
+        React.createElement("div", { className:"question-box" },
+          `${question.bin} — ${question.tense} (${question.pronoun})`,
+          React.createElement("form", { onSubmit:checkAnswer },
+            React.createElement("input", {
+              value:input,
+              onChange:e=>setInput(e.target.value),
+              placeholder:"Type answer"
+            })
+          )
         ),
-        React.createElement("div", { className:"ui" },
-          React.createElement("div", { className:"question-box" },
-            `${question.bin} — ${question.tense}`,
-            React.createElement("div", null, "Type the correct form:")
-          ),
-          React.createElement("input", {
-            value:input,
-            onChange:e=>setInput(e.target.value),
-            onKeyDown:e=>{if(e.key==="Enter") handleSubmit();}
-          }),
-          React.createElement("button", { onClick:handleSubmit }, "Submit")
+        React.createElement(Canvas, null,
+          React.createElement(OrbitControls, null),
+          React.createElement(ambientLight, { intensity:0.5 }),
+          React.createElement(pointLight, { position:[10,10,10] }),
+          React.createElement(FloatingText, { text: feedback==="success" ? "✓" : feedback==="fail" ? "✗" : question.verb, feedback })
         )
       );
     }
 
-    ReactDOM.render(React.createElement(App), document.getElementById("root"));
+    ReactDOM.createRoot(document.getElementById("root")).render(React.createElement(App));
   </script>
 </body>
 </html>
