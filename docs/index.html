@@ -1,135 +1,182 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-<meta charset="UTF-8" />
-<meta name="viewport" content="width=device-width, initial-scale=1.0"/>
-<title>Hebrew Binyanim Drill</title>
-<style>
-  body, html { margin: 0; padding: 0; font-family: sans-serif; overflow: hidden; background: #111; color: white;}
-  #root { width: 100vw; height: 100vh; display: flex; flex-direction: column; }
-  .ui { position: absolute; top: 0; left: 0; width: 100%; z-index: 10; padding: 10px; display: flex; flex-direction: column; align-items: center; }
-  .question-box { font-size: 1.3rem; margin-bottom: 10px; text-align: center; }
-  input { font-size: 1.2rem; padding: 5px; border-radius: 5px; border: none; width: 80%; text-align: center;}
-  button { font-size: 1rem; padding: 5px 10px; margin-top: 10px; border-radius: 5px; border: none; cursor: pointer; }
-  .streak { margin-top: 5px; font-size: 1rem; color: gold;}
-</style>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Hebrew Binyanim Drill</title>
+  <style>
+    body, html { margin: 0; padding: 0; font-family: sans-serif; overflow: hidden; background: black;}
+    #root { width: 100vw; height: 100vh; display: flex; flex-direction: column; }
+    .ui { position: absolute; top: 0; left: 0; width: 100%; z-index: 10; padding: 10px; display: flex; flex-direction: column; align-items: center; }
+    .question-box { font-size: 1.5rem; margin-bottom: 10px; text-align: center; color: white; }
+    input { font-size: 1.2rem; padding: 5px; border-radius: 5px; border: none; }
+    button { font-size: 1rem; padding: 5px 10px; margin-top: 10px; border-radius: 5px; border: none; cursor: pointer; }
+  </style>
 </head>
 <body>
-<div id="root"></div>
+  <div id="root"></div>
 
-<script type="module">
-import React, { useState, useEffect, useRef } from "https://cdn.skypack.dev/react";
-import ReactDOM from "https://cdn.skypack.dev/react-dom";
-import { Canvas, useFrame } from "https://cdn.skypack.dev/@react-three/fiber";
-import { OrbitControls, Text, Html } from "https://cdn.skypack.dev/@react-three/drei";
-import * as THREE from "https://cdn.skypack.dev/three";
+  <script type="module">
+    import React, { useState, useRef, useEffect } from "https://cdn.skypack.dev/react";
+    import ReactDOM from "https://cdn.skypack.dev/react-dom";
+    import { Canvas, useFrame } from "https://cdn.skypack.dev/@react-three/fiber";
+    import { OrbitControls, Text } from "https://cdn.skypack.dev/@react-three/drei";
 
-// ==== Data ====
-const BINYANIM = ["Qal","Nif'al","Pi'el","Pu'al","Hif'il","Hof'al","Hitpa'el"];
-const TENSES = ["Past","Present","Future","Imperative"];
+    // === Data for 7 binyanim (sample entries for brevity — expand as needed) ===
+    const CONJUGATIONS = {
+      "Qal": {
+        "Past": ["כָּתַב", "כָּתַבְתָּ", "כָּתְבָה"],
+        "Present": ["כּוֹתֵב", "כּוֹתֶבֶת"],
+        "Future": ["אֶכְתֹּב", "תִּכְתֹּב"],
+        "Imperative": ["כְּתֹב"]
+      },
+      "Nifal": {
+        "Past": ["נִכְתַּב"],
+        "Present": ["נִכְתָּב"],
+        "Future": ["אֶכָּתֵב"],
+        "Imperative": ["הִכָּתֵב"]
+      },
+      "Pi'el": {
+        "Past": ["דִּבֵּר", "דִּבַּרְתָּ"],
+        "Present": ["מְדַבֵּר"],
+        "Future": ["אֲדַבֵּר"],
+        "Imperative": ["דַּבֵּר"]
+      },
+      "Pu'al": {
+        "Past": ["דֻּבַּר"],
+        "Present": ["מְדֻבָּר"],
+        "Future": ["יְדֻבַּר"],
+        "Imperative": []
+      },
+      "Hifil": {
+        "Past": ["הִכְתִּיב"],
+        "Present": ["מַכְתִּיב"],
+        "Future": ["אַקְתִּיב"],
+        "Imperative": ["הַכְתֵּב"]
+      },
+      "Hufal": {
+        "Past": ["הֻכְתַּב"],
+        "Present": ["מוּכְתָּב"],
+        "Future": ["יוּכְתַּב"],
+        "Imperative": []
+      },
+      "Hitpa'el": {
+        "Past": ["הִתְכַּתֵּב"],
+        "Present": ["מִתְכַּתֵּב"],
+        "Future": ["אֶתְכַּתֵּב"],
+        "Imperative": ["הִתְכַּתֵּב"]
+      }
+    };
 
-// Sample simplified conjugations (expand to full dataset)
-const CONJUGATIONS = {
-  "Qal": { "Past":["כָּתַב","כָּתַבְתָּ","כָּתְבָה"], "Present":["כּוֹתֵב","כּוֹתֶבֶת"], "Future":["אֶכְתֹּב","תִּכְתֹּב"], "Imperative":["כְּתֹב"] },
-  "Pi'el": { "Past":["דִּבֵּר","דִּבַּרְתָּ","דִּבְּרָה"], "Present":["מְדַבֵּר","מְדַבֶּרֶת"], "Future":["אֲדַבֵּר","תְּדַבֵּר"], "Imperative":["דַּבֵּר"] },
-  // Add remaining binyanim...
-};
+    const BINYANIM = Object.keys(CONJUGATIONS);
+    const TENSES = ["Past", "Present", "Future", "Imperative"];
 
-// ==== Spaced repetition ====
-const loadProgress = () => JSON.parse(localStorage.getItem("binyanProgress")||"{}");
-const saveProgress = (progress) => localStorage.setItem("binyanProgress", JSON.stringify(progress));
-const getNextQuestion = (progress) => {
-  const bin = BINYANIM[Math.floor(Math.random() * BINYANIM.length)];
-  const tense = TENSES[Math.floor(Math.random() * TENSES.length)];
-  const forms = CONJUGATIONS[bin]?.[tense] || ["—"];
-  const answer = forms[Math.floor(Math.random() * forms.length)];
-  return {bin, tense, answer};
-};
-
-// ==== Sound effect ====
-const playSound = (type) => {
-  const url = type==="success" ? "https://freesound.org/data/previews/109/109662_945474-lq.mp3"
-                               : "https://freesound.org/data/previews/331/331912_3248244-lq.mp3";
-  new Audio(url).play();
-}
-
-// ==== Floating particles ====
-function Particles({ feedback }) {
-  const group = useRef();
-  useFrame((state, delta) => {
-    if (group.current) group.current.rotation.y += delta*0.3;
-  });
-  if (!feedback) return null;
-  const color = feedback==="success" ? "lime" : "red";
-  return (
-    <group ref={group}>
-      {[...Array(15)].map((_,i)=>
-        <mesh key={i} position={[Math.random()*4-2, Math.random()*4-2, Math.random()*4-2]}>
-          <sphereGeometry args={[0.05,8,8]} />
-          <meshStandardMaterial color={color} emissive={color} />
-        </mesh>
-      )}
-    </group>
-  )
-}
-
-// ==== Rotating text ====
-function FloatingText({ text, feedback }) {
-  const ref = useRef();
-  useFrame((state, delta)=>{ if(ref.current) ref.current.rotation.y += delta; });
-  const color = feedback==="success" ? "lime" : feedback==="fail" ? "red" : "white";
-  return <Text ref={ref} fontSize={1} color={color} position={[0,0,0]}>{text}</Text>
-}
-
-// ==== App ====
-function App() {
-  const [progress, setProgress] = useState(loadProgress());
-  const [question, setQuestion] = useState(getNextQuestion(progress));
-  const [input, setInput] = useState("");
-  const [feedback, setFeedback] = useState(null);
-  const [streak, setStreak] = useState(progress.streak||0);
-
-  const nextQ = () => { const q = getNextQuestion(progress); setQuestion(q); setInput(""); setFeedback(null); }
-
-  const handleSubmit = () => {
-    if(input === question.answer){
-      playSound("success");
-      setFeedback("success");
-      const newStreak = streak+1;
-      setStreak(newStreak);
-      const newProgress = {...progress, streak:newStreak};
-      setProgress(newProgress); saveProgress(newProgress);
-      setTimeout(nextQ, 800);
-    } else {
-      playSound("fail");
-      setFeedback("fail");
-      setStreak(0);
-      const newProgress = {...progress, streak:0};
-      setProgress(newProgress); saveProgress(newProgress);
+    // === Spaced Repetition (SM-2 inspired simplified) ===
+    function loadProgress() {
+      const data = localStorage.getItem("hebrewProgress");
+      return data ? JSON.parse(data) : {};
     }
-  }
+    function saveProgress(progress) {
+      localStorage.setItem("hebrewProgress", JSON.stringify(progress));
+    }
 
-  return (
-    <>
-      <Canvas camera={{position:[0,0,5]}}>
-        <ambientLight intensity={0.5}/>
-        <pointLight position={[10,10,10]}/>
-        <OrbitControls enableZoom={false}/>
-        <FloatingText text={question.answer} feedback={feedback}/>
-        <Particles feedback={feedback}/>
-      </Canvas>
-      <div className="ui">
-        <div className="question-box">{question.bin} — {question.tense}</div>
-        <input value={input} onChange={e=>setInput(e.target.value)} onKeyDown={e=>{if(e.key==="Enter") handleSubmit();}} placeholder="Type answer"/>
-        <button onClick={handleSubmit}>Submit</button>
-        <div className="streak">🔥 Streak: {streak}</div>
-      </div>
-    </>
-  )
-}
+    function getDueQuestions(progress) {
+      const due = [];
+      for (const bin of BINYANIM) {
+        for (const tense of TENSES) {
+          const forms = CONJUGATIONS[bin][tense] || [];
+          for (const form of forms) {
+            const key = bin + "-" + tense + "-" + form;
+            const entry = progress[key] || { interval: 1, due: Date.now() };
+            if (Date.now() >= entry.due) due.push({ bin, tense, answer: form });
+          }
+        }
+      }
+      return due;
+    }
 
-ReactDOM.render(<App />, document.getElementById("root"));
-</script>
+    function updateProgress(progress, key, success) {
+      const entry = progress[key] || { interval: 1, due: Date.now() };
+      if (success) {
+        entry.interval *= 2;
+      } else {
+        entry.interval = 1;
+      }
+      entry.due = Date.now() + entry.interval * 60 * 1000; // minutes
+      progress[key] = entry;
+      saveProgress(progress);
+    }
+
+    // === React Components ===
+    function FloatingText({ text, feedback }) {
+      const ref = useRef();
+      useFrame((_, delta) => { if (ref.current) ref.current.rotation.y += delta; });
+      const color = feedback === "success" ? "lime" : feedback === "fail" ? "red" : "white";
+      return React.createElement(Text, { ref, color, fontSize: 1, position:[0,0,0]}, text);
+    }
+
+    function App() {
+      const [progress, setProgress] = useState(loadProgress());
+      const [question, setQuestion] = useState(null);
+      const [input, setInput] = useState("");
+      const [feedback, setFeedback] = useState(null);
+
+      useEffect(() => { nextQuestion(); }, []);
+
+      const nextQuestion = () => {
+        const due = getDueQuestions(progress);
+        if (due.length === 0) {
+          setQuestion({ bin: "All done!", tense: "", answer: "" });
+        } else {
+          setQuestion(due[Math.floor(Math.random() * due.length)]);
+        }
+      };
+
+      const handleSubmit = () => {
+        const key = question.bin + "-" + question.tense + "-" + question.answer;
+        const success = input === question.answer;
+        setFeedback(success ? "success" : "fail");
+        playSound(success ? "success" : "fail");
+        updateProgress(progress, key, success);
+        setProgress({ ...progress });
+        if (success) {
+          setTimeout(() => { setInput(""); setFeedback(null); nextQuestion(); }, 800);
+        }
+      };
+
+      const playSound = (type) => {
+        const audio = new Audio(type === "success"
+          ? "https://freesound.org/data/previews/109/109662_945474-lq.mp3"
+          : "https://freesound.org/data/previews/331/331912_3248244-lq.mp3");
+        audio.play();
+      };
+
+      if (!question) return null;
+
+      return React.createElement(React.Fragment, null,
+        React.createElement(Canvas, { camera:{ position:[0,0,5] } },
+          React.createElement("ambientLight", { intensity:0.5 }),
+          React.createElement("pointLight", { position:[10,10,10] }),
+          React.createElement(OrbitControls, null),
+          React.createElement(FloatingText, { text:feedback==="success"?"✔":feedback==="fail"?"✘":question.answer, feedback })
+        ),
+        React.createElement("div", { className:"ui" },
+          React.createElement("div", { className:"question-box" },
+            `${question.bin} — ${question.tense}`,
+            React.createElement("div", null, "Type the correct form:")
+          ),
+          React.createElement("input", {
+            value:input,
+            onChange:e=>setInput(e.target.value),
+            onKeyDown:e=>{if(e.key==="Enter") handleSubmit();}
+          }),
+          React.createElement("button", { onClick:handleSubmit }, "Submit")
+        )
+      );
+    }
+
+    ReactDOM.render(React.createElement(App), document.getElementById("root"));
+  </script>
 </body>
 </html>
 
