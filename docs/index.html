@@ -1,0 +1,135 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+<title>Hebrew Binyanim Drill</title>
+<style>
+  body, html { margin: 0; padding: 0; font-family: sans-serif; overflow: hidden; background: #111; color: white;}
+  #root { width: 100vw; height: 100vh; display: flex; flex-direction: column; }
+  .ui { position: absolute; top: 0; left: 0; width: 100%; z-index: 10; padding: 10px; display: flex; flex-direction: column; align-items: center; }
+  .question-box { font-size: 1.3rem; margin-bottom: 10px; text-align: center; }
+  input { font-size: 1.2rem; padding: 5px; border-radius: 5px; border: none; width: 80%; text-align: center;}
+  button { font-size: 1rem; padding: 5px 10px; margin-top: 10px; border-radius: 5px; border: none; cursor: pointer; }
+  .streak { margin-top: 5px; font-size: 1rem; color: gold;}
+</style>
+</head>
+<body>
+<div id="root"></div>
+
+<script type="module">
+import React, { useState, useEffect, useRef } from "https://cdn.skypack.dev/react";
+import ReactDOM from "https://cdn.skypack.dev/react-dom";
+import { Canvas, useFrame } from "https://cdn.skypack.dev/@react-three/fiber";
+import { OrbitControls, Text, Html } from "https://cdn.skypack.dev/@react-three/drei";
+import * as THREE from "https://cdn.skypack.dev/three";
+
+// ==== Data ====
+const BINYANIM = ["Qal","Nif'al","Pi'el","Pu'al","Hif'il","Hof'al","Hitpa'el"];
+const TENSES = ["Past","Present","Future","Imperative"];
+
+// Sample simplified conjugations (expand to full dataset)
+const CONJUGATIONS = {
+  "Qal": { "Past":["כָּתַב","כָּתַבְתָּ","כָּתְבָה"], "Present":["כּוֹתֵב","כּוֹתֶבֶת"], "Future":["אֶכְתֹּב","תִּכְתֹּב"], "Imperative":["כְּתֹב"] },
+  "Pi'el": { "Past":["דִּבֵּר","דִּבַּרְתָּ","דִּבְּרָה"], "Present":["מְדַבֵּר","מְדַבֶּרֶת"], "Future":["אֲדַבֵּר","תְּדַבֵּר"], "Imperative":["דַּבֵּר"] },
+  // Add remaining binyanim...
+};
+
+// ==== Spaced repetition ====
+const loadProgress = () => JSON.parse(localStorage.getItem("binyanProgress")||"{}");
+const saveProgress = (progress) => localStorage.setItem("binyanProgress", JSON.stringify(progress));
+const getNextQuestion = (progress) => {
+  const bin = BINYANIM[Math.floor(Math.random() * BINYANIM.length)];
+  const tense = TENSES[Math.floor(Math.random() * TENSES.length)];
+  const forms = CONJUGATIONS[bin]?.[tense] || ["—"];
+  const answer = forms[Math.floor(Math.random() * forms.length)];
+  return {bin, tense, answer};
+};
+
+// ==== Sound effect ====
+const playSound = (type) => {
+  const url = type==="success" ? "https://freesound.org/data/previews/109/109662_945474-lq.mp3"
+                               : "https://freesound.org/data/previews/331/331912_3248244-lq.mp3";
+  new Audio(url).play();
+}
+
+// ==== Floating particles ====
+function Particles({ feedback }) {
+  const group = useRef();
+  useFrame((state, delta) => {
+    if (group.current) group.current.rotation.y += delta*0.3;
+  });
+  if (!feedback) return null;
+  const color = feedback==="success" ? "lime" : "red";
+  return (
+    <group ref={group}>
+      {[...Array(15)].map((_,i)=>
+        <mesh key={i} position={[Math.random()*4-2, Math.random()*4-2, Math.random()*4-2]}>
+          <sphereGeometry args={[0.05,8,8]} />
+          <meshStandardMaterial color={color} emissive={color} />
+        </mesh>
+      )}
+    </group>
+  )
+}
+
+// ==== Rotating text ====
+function FloatingText({ text, feedback }) {
+  const ref = useRef();
+  useFrame((state, delta)=>{ if(ref.current) ref.current.rotation.y += delta; });
+  const color = feedback==="success" ? "lime" : feedback==="fail" ? "red" : "white";
+  return <Text ref={ref} fontSize={1} color={color} position={[0,0,0]}>{text}</Text>
+}
+
+// ==== App ====
+function App() {
+  const [progress, setProgress] = useState(loadProgress());
+  const [question, setQuestion] = useState(getNextQuestion(progress));
+  const [input, setInput] = useState("");
+  const [feedback, setFeedback] = useState(null);
+  const [streak, setStreak] = useState(progress.streak||0);
+
+  const nextQ = () => { const q = getNextQuestion(progress); setQuestion(q); setInput(""); setFeedback(null); }
+
+  const handleSubmit = () => {
+    if(input === question.answer){
+      playSound("success");
+      setFeedback("success");
+      const newStreak = streak+1;
+      setStreak(newStreak);
+      const newProgress = {...progress, streak:newStreak};
+      setProgress(newProgress); saveProgress(newProgress);
+      setTimeout(nextQ, 800);
+    } else {
+      playSound("fail");
+      setFeedback("fail");
+      setStreak(0);
+      const newProgress = {...progress, streak:0};
+      setProgress(newProgress); saveProgress(newProgress);
+    }
+  }
+
+  return (
+    <>
+      <Canvas camera={{position:[0,0,5]}}>
+        <ambientLight intensity={0.5}/>
+        <pointLight position={[10,10,10]}/>
+        <OrbitControls enableZoom={false}/>
+        <FloatingText text={question.answer} feedback={feedback}/>
+        <Particles feedback={feedback}/>
+      </Canvas>
+      <div className="ui">
+        <div className="question-box">{question.bin} — {question.tense}</div>
+        <input value={input} onChange={e=>setInput(e.target.value)} onKeyDown={e=>{if(e.key==="Enter") handleSubmit();}} placeholder="Type answer"/>
+        <button onClick={handleSubmit}>Submit</button>
+        <div className="streak">🔥 Streak: {streak}</div>
+      </div>
+    </>
+  )
+}
+
+ReactDOM.render(<App />, document.getElementById("root"));
+</script>
+</body>
+</html>
+
